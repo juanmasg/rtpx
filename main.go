@@ -2,12 +2,13 @@ package main
 
 import (
     //"github.com/Comcast/gots"
-    "github.com/Comcast/gots/packet"
+    //"github.com/Comcast/gots/packet"
 	"log"
 	"io"
-	"fmt"
+	//"fmt"
 	"net"
 	"os"
+    "time"
     "flag"
     "strconv"
     "strings"
@@ -60,7 +61,6 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     udpr := GetMulticastReader(addrinfo)
 
     Copy(udpr, w)
-    Cleanup(addrinfo)
 }
 
 func RTPToFile(addrinfo string){
@@ -71,7 +71,6 @@ func RTPToFile(addrinfo string){
     }
 
     Copy(udpr, f)
-    Cleanup(addrinfo)
 }
 
 func Copy(r io.Reader, w io.Writer){
@@ -80,6 +79,12 @@ func Copy(r io.Reader, w io.Writer){
         _, err := w.Write(rtp.Payload); if err != nil{
             break
         }
+    }
+}
+
+func Loop(){
+    for{
+        time.Sleep(100 * time.Millisecond)
     }
 }
 
@@ -104,64 +109,10 @@ func main(){
 	        "/rtp/": RTPToHTTP,
 	    })
     }
-
-/*
-	addr, err := net.ResolveUDPAddr("udp", "239.0.0.26:8208")
-	if err != nil {
-		log.Fatal(err)
-	}
-	mcastr, err := net.ListenMulticastUDP("udp", nil, addr)
-
-	f, err := os.OpenFile("dump", os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0777); if err != nil{
-        log.Fatal(err)
-    }
-
-    rtpr := &RTPReader{mcastr}
-    for{
-        rtp := rtpr.ReadRTP()
-        f.Write(rtp.Payload)
-    }
-    //io.Copy(f, rtpr)
-
-	for{
-		b := make([]byte, 1500)
-		n, err := r.Read(b); if err != nil{
-            log.Fatal(err)
-		}
-		p := RTPPacket(b[:n])
-		f.Write(p.Payload)
-	}
-
-	rtpr := &RTPReader{r}
-	for{
-		b := make([]byte, 1500)
-		n, err := rtpr.Read(b); if err != nil{
-			log.Println(n, err)
-		}
-		f.Write(b[:n])
-	}
-*/
 }
 
-
-
-
-
-
-
-
-
+/*
 func main1(){
-    //MulticastInit()
-//    NewHTTPServer(":1234")
-
-    //r := NewMulticastReader(addr, port)
-    r := NewMulticastReader("239.0.0.26", 8208)
-    //log.Println(r)
-	pidSet := make(map[uint16]bool, 5)
-	pkt := make([]byte, 100 * packet.PacketSize)
-//	prevcc := uint8(0)
-
     for read, err := r.Read(pkt); read > 0 && err == nil; read, err = r.Read(pkt) {
 //		if err != nil {
 //             println(err)
@@ -183,8 +134,5 @@ func main1(){
 		fmt.Print(string(pkt))
         //fmt.Println("Found pid", pid, pat, cc)
     }
-
-    for v := range pidSet {
-        fmt.Printf("Found pid %d\n", v)
-    }
 }
+*/

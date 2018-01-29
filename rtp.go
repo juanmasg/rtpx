@@ -29,6 +29,14 @@ type RTPExtension struct{
     Payload             []byte
 }
 
+func RTPQuickPayload(b []byte) []byte{
+    offset := int(12 + 4 * (b[0] & 0xf)) //hdr + CSRC
+    if b[0] & 0x10 != 0{ //xtensions
+        offset += 4 + 4 * int(binary.BigEndian.Uint16(b[offset+2:offset+4])) //xten hdr + 4 per xten
+    }
+    return b[offset:]
+}
+
 func RTPPacket(b []byte) *RTP{
     rtp := &RTP{}
     rtp.Version = b[0] & 0xc0 >> 6
