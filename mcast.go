@@ -18,10 +18,11 @@ func (r MulticastReader) Read(b []byte) (n int, err error){
     return
 }
 
-func (r MulticastReader) Close(){
+func (r MulticastReader) Close() (err error){
     log.Println("CLOSE!")
     r.p.Close()
     r.c.Close()
+    return nil
 }
 
 func (r *MulticastReader) WriteTo(w io.Writer) (ntot int64, err error){

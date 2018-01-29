@@ -3,7 +3,22 @@ package main
 import (
     "encoding/binary"
     "io"
+    "fmt"
 )
+
+type PayloadType uint8
+const (
+    MP2T    PayloadType = 33
+)
+
+func (t PayloadType) String() string{
+    switch t{
+        case MP2T:
+            return "MP2T"
+    }
+
+    return "Unknown"
+}
 
 type RTP struct{
     Version             uint8
@@ -11,7 +26,7 @@ type RTP struct{
     Extension           bool
     CC                  uint8
     Marker              bool
-    PayloadType         uint8
+    PayloadType         PayloadType
     SequenceNumber      uint16
     Timestamp           uint32
     SSRC                uint32
@@ -44,7 +59,7 @@ func RTPPacket(b []byte) *RTP{
     rtp.Extension = b[0] & 0x10 != 0
     rtp.CC = b[0] & 0xf
     rtp.Marker = b[1] & 0x80 != 0
-    rtp.PayloadType = b[1] & 0x7f
+    rtp.PayloadType = PayloadType(b[1] & 0x7f)
     rtp.SequenceNumber = binary.BigEndian.Uint16(b[2:4])
     rtp.Timestamp = binary.BigEndian.Uint32(b[4:8])
     rtp.SSRC = binary.BigEndian.Uint32(b[8:12])
@@ -74,6 +89,10 @@ func RTPPacket(b []byte) *RTP{
                 offset += 3 //padding to 32bit
             }
         }
+    }
+
+    if false{
+        fmt.Printf("%+v\n", rtp)
     }
 
     rtp.Payload = b[offset:]

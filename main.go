@@ -4,88 +4,80 @@ import (
     //"github.com/Comcast/gots"
     //"github.com/Comcast/gots/packet"
 	"log"
-	"io"
 	//"fmt"
-	"net"
 	"os"
-    "time"
     "flag"
-    "strconv"
     "strings"
 	"net/http"
 )
 
 var (
-	readers map[string]io.Reader
-    writers map[string]io.Writer
+    proxy *Proxy
 )
 
-func AddrinfoToIPPort(addrinfo string) (ip string, port int){
-    ipport := strings.Split(addrinfo, ":")
-    if len(ipport) != 2{
-        log.Println("BAD ADDRESS", addrinfo)
-        return
-    }
-
-    ip = ipport[0]
-    port, err := strconv.Atoi(ipport[1]); if err != nil{
-        log.Println(ipport, err)
-        return
-    }
-
-    log.Println(ip, port)
-    return
-}
-
-func GetMulticastReader(addrinfo string) io.Reader{
-    ip, port := AddrinfoToIPPort(addrinfo)
-	udpr, ok := readers[addrinfo]; if !ok{
-		udpr = NewMulticastReader(ip, port)
-		readers[addrinfo] = udpr
-	}
-
-    return udpr
-}
-
-func GetMulticastReader2(addrinfo string) io.Reader{
-	addr, err := net.ResolveUDPAddr("udp", addrinfo); if err != nil {
-	    log.Fatal(err)
-	}
-	r, err := net.ListenMulticastUDP("udp", nil, addr)
-
-    return r
-}
-
 func RTPToHTTP(w http.ResponseWriter, req *http.Request){
-    addrinfo := strings.Split(req.URL.Path, "/")[2]
-    udpr := GetMulticastReader(addrinfo)
 
-    Copy(udpr, w)
+    log.Println(req)
+
+    if req.Method != "GET"{
+        return
+    }
+
+    addrinfo := strings.Split(req.URL.Path, "/")[2]
+    proxy.RegisterReader(addrinfo)
+
+    //w.Header().Set("Transfer-Encoding", "identity")
+
+    c := make(chan []byte, 1024)
+    proxy.RegisterWriter(addrinfo, c)
+
+    done := false
+    closed := w.(http.CloseNotifier).CloseNotify()
+
+    for{
+        //log.Println("SELECT!")
+        select{
+        case b := <-c:
+            n, err := w.Write(b); if err != nil{
+                log.Println(err, n)
+                done = true
+                break
+            }
+            //log.Println(n, err)
+        case <- closed:
+            done = true
+            break
+        }
+        if done{ break }
+    }
+
+    proxy.RemoveWriter(addrinfo, c)
 }
 
 func RTPToFile(addrinfo string){
-    udpr := GetMulticastReader(addrinfo)
+    proxy.RegisterReader(addrinfo)
 
-	f, err := os.OpenFile(addrinfo, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0664); if err != nil{
+	w, err := os.OpenFile(addrinfo, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0664); if err != nil{
         log.Fatal(err)
     }
 
-    Copy(udpr, f)
-}
+    c := make(chan []byte, 1024)
+    proxy.RegisterWriter(addrinfo, c)
 
-func Copy(r io.Reader, w io.Writer){
+    done := false
+
     for{
-        rtp := ReadRTP(r)
-        _, err := w.Write(rtp.Payload); if err != nil{
-            break
+        select{
+        case b := <-c:
+            n, err := w.Write(b); if err != nil{
+                log.Println(err, n)
+                done = true
+                break
+            }
         }
+        if done{ break }
     }
-}
-
-func Loop(){
-    for{
-        time.Sleep(100 * time.Millisecond)
-    }
+    proxy.RemoveWriter(addrinfo, c)
 }
 
 func main(){
@@ -97,7 +89,8 @@ func main(){
 
     flag.Parse()
 
-	readers = make(map[string]io.Reader)
+    proxy = NewProxy()
+    go proxy.Loop()
 
     if *opt_testrtp != ""{
         RTPToFile(*opt_testrtp)
@@ -107,6 +100,7 @@ func main(){
 	    NewHTTPServer(":1234", map[string]func(http.ResponseWriter, *http.Request){
 	        "/udp/": RTPToHTTP,
 	        "/rtp/": RTPToHTTP,
+	        //"/raw/": RAWToHTTP,
 	    })
     }
 }
