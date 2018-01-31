@@ -39,6 +39,8 @@ func (p *Proxy) RegisterReader2(addrinfo string){
 	        log.Fatal(err)
 	    }
 	    r, err = net.ListenMulticastUDP("udp", nil, addr)
+        r.(*net.UDPConn).SetReadBuffer(4 * 1024 * 1024)
+        p.readers[addrinfo] = r
         log.Println("Registered new reader2 for", addrinfo, r)
     }
 }
