@@ -7,9 +7,11 @@ import (
     "time"
     "log"
     "net"
+    "sync"
 )
 
 type Proxy struct{
+    sync.RWMutex
     readers map[string]io.Reader
     writers map[string][]chan []byte
     rtpseq map[string]uint16
@@ -25,15 +27,18 @@ func NewProxy() *Proxy{
 }
 
 func (p *Proxy) RegisterReader(addrinfo string){
+    p.Lock()
     ip, port := addrinfoToIPPort(addrinfo)
 	r, ok := p.readers[addrinfo]; if !ok{
 		r = NewMulticastReader(ip, port)
 		p.readers[addrinfo] = r
         log.Println("Registered new reader for", addrinfo, r)
 	}
+    p.Unlock()
 }
 
 func (p *Proxy) RegisterReader2(addrinfo string){
+    p.Lock()
     r, ok := p.readers[addrinfo]; if !ok{
 	    addr, err := net.ResolveUDPAddr("udp", addrinfo); if err != nil {
 	        log.Fatal(err)
@@ -43,9 +48,11 @@ func (p *Proxy) RegisterReader2(addrinfo string){
         p.readers[addrinfo] = r
         log.Println("Registered new reader2 for", addrinfo, r)
     }
+    p.Unlock()
 }
 
 func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
+    p.Lock()
     _, ok := p.writers[addrinfo]; if !ok{
         p.writers[addrinfo] = make([]chan []byte, 0)
     }
@@ -55,9 +62,13 @@ func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
 
     log.Println("Readers", p.readers)
     log.Println("Writers", p.writers)
+
+    p.Unlock()
 }
 
 func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
+    p.Lock()
+
     for i, wc := range p.writers[addrinfo]{
         if c == wc{
             p.writers[addrinfo] = append(p.writers[addrinfo][:i], p.writers[addrinfo][i+1:]...)
@@ -74,6 +85,8 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
 
     log.Println("Readers", p.readers)
     log.Println("Writers", p.writers)
+
+    p.Unlock()
 }
 
 func (p *Proxy) Loop(){
@@ -81,6 +94,7 @@ func (p *Proxy) Loop(){
         time.Sleep(100 * time.Millisecond)
         for{
             if len(p.readers) == 0{ break }
+            p.Lock()
             for addrinfo, r := range p.readers{
                 rtp := ReadRTP(r)
 
@@ -95,6 +109,7 @@ func (p *Proxy) Loop(){
                 }
                 p.rtpseq[addrinfo] = rtp.SequenceNumber
             }
+            p.Unlock()
         }
     }
 }
