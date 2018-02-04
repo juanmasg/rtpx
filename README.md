@@ -1,1 +1,1 @@
-Yet another Multicast/RTP to HTTP proxy, inspired by udpxy.
+Multicast/RTP to HTTP proxy, inspired by udpxy, with recording capabilities
