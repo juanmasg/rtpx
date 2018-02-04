@@ -101,12 +101,12 @@ func RTPPacket(b []byte) *RTP{
 }
 
 
-func ReadRTP(r io.Reader) *RTP{
+func ReadRTP(r io.Reader) (*RTP, error){
     b := make([]byte, 1500)
 	n, err := r.Read(b); if err != nil{
-        return nil
+        return nil, err
 	}
 	rtp := RTPPacket(b[:n])
-    return rtp
+    return rtp, nil
 }
 

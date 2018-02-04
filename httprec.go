@@ -29,13 +29,17 @@ func httprecCallback(orr *OnetimeRecordingRequest){
     done := false
     for{
         select{
-        case b := <-c:
+        case b, stillopen := <-c:
+
+            if ! stillopen{
+                done = true; break
+            }
+
             n, err := w.Write(b); if err != nil{
                 log.Println(err, n)
                 if err == io.EOF{
-                    done = true
                     log.Println("Done recording", filepath, orr)
-                    break
+                    done = true; break
                 }
             }
         }

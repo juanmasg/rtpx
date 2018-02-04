@@ -77,9 +77,12 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
     }
     if len(p.writers[addrinfo]) == 0{
         log.Println("No more writers left for", addrinfo, "closing reader")
-        p.readers[addrinfo].(io.ReadCloser).Close()
-        delete(p.readers, addrinfo)
         delete(p.writers, addrinfo)
+
+        _, exists := p.readers[addrinfo]; if exists{
+            p.readers[addrinfo].(io.ReadCloser).Close()
+            delete(p.readers, addrinfo)
+        }
         log.Println("Removed all read/write references to", addrinfo)
     }
 
@@ -89,6 +92,20 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
     p.Unlock()
 }
 
+func (p *Proxy) RemoveReader(reader io.Reader){
+    log.Println("Remove reader",  reader, p.readers)
+    for addrinfo, r := range p.readers{
+        if r == reader{
+            log.Println("Found addrinfo for reader", addrinfo, ". Remove all writers")
+            r.(io.Closer).Close()
+            delete(p.readers, addrinfo)
+            for _, c := range p.writers[addrinfo]{
+                close(c)
+            }
+        }
+    }
+}
+
 func (p *Proxy) Loop(){
     for{
         time.Sleep(100 * time.Millisecond)
@@ -96,7 +113,19 @@ func (p *Proxy) Loop(){
             if len(p.readers) == 0{ break }
             p.Lock()
             for addrinfo, r := range p.readers{
-                rtp := ReadRTP(r)
+                r.(*net.UDPConn).SetReadDeadline(time.Now().Add(250 * time.Millisecond)) //FIXME: ?!
+                rtp, err := ReadRTP(r); if err != nil{
+                    if err == io.EOF{
+                        log.Println("EOF from", r)
+                    }else{
+                        operr := err.(*net.OpError)
+                        if operr != nil && operr.Timeout(){
+                            log.Println("Timeout from", r)
+                        }
+                    }
+                    p.RemoveReader(r)
+                    break
+                }
 
                 if rtp == nil{ continue }
 
@@ -130,4 +159,11 @@ func addrinfoToIPPort(addrinfo string) (ip string, port int){
 
     return
 }
+
+func readToChannel(addrinfo string, r io.Reader, c chan []byte){
+    for{
+        
+    }
+}
+
 
