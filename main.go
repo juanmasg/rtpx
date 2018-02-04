@@ -58,8 +58,11 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
 }
 
 func httprecCallback(orr *OnetimeRecordingRequest){
+
     w := NewTimedWriter(fmt.Sprintf("%s %s.%s - %s.ts", orr.name, orr.season, orr.episode, orr.title), orr.Duration)
+
     proxy.RegisterReader2(orr.addrinfo)
+
     c := make(chan []byte, 1024)
     proxy.RegisterWriter(orr.addrinfo, c)
 

@@ -24,7 +24,10 @@ type RecordingRequest struct{
     episode         string
     title           string
 }
+
 func (rr RecordingRequest) Run(){
+    // Find recurrent titles in epg
+    // Schedule multiple one-time requests
 }
 
 type OnetimeRecordingRequest struct{
