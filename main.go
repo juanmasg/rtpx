@@ -59,12 +59,17 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
 
 func httprecCallback(orr *OnetimeRecordingRequest){
 
-    w := NewTimedWriter(fmt.Sprintf("%s %s.%s - %s.ts", orr.name, orr.season, orr.episode, orr.title), orr.Duration)
+    recdir := "rec"
+    os.MkdirAll(recdir, 0755)
 
-    proxy.RegisterReader2(orr.addrinfo)
+    filepath := fmt.Sprintf("%s/%s %s.%s - %s.ts", recdir, orr.Name, orr.Season, orr.Episode, orr.Title)
+
+    w := NewTimedWriter(filepath, orr.Duration)
+
+    proxy.RegisterReader2(orr.Addrinfo)
 
     c := make(chan []byte, 1024)
-    proxy.RegisterWriter(orr.addrinfo, c)
+    proxy.RegisterWriter(orr.Addrinfo, c)
 
     done := false
     for{
@@ -80,7 +85,7 @@ func httprecCallback(orr *OnetimeRecordingRequest){
         }
         if done{ break }
     }
-    proxy.RemoveWriter(orr.addrinfo, c)
+    proxy.RemoveWriter(orr.Addrinfo, c)
 }
 
 func HTTPRec(w http.ResponseWriter, req *http.Request){
@@ -117,12 +122,13 @@ func HTTPRec(w http.ResponseWriter, req *http.Request){
 
     if ! start.IsZero() && duration.Seconds() > 0{
         rec = OnetimeRecordingRequest{start,duration,rec.(RecordingRequest)}
+    }else{
+        log.Println("Periodic request received but EPG is empty")
     }
 
     log.Printf("%+v", rec)
 
-    go rec.(Recordable).Run()
-
+    go rec.(Recordable).Run(true)
 }
 
 func RTPToFile(addrinfo string){
