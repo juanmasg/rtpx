@@ -79,6 +79,7 @@ func httprecCallback(orr *OnetimeRecordingRequest){
                 log.Println(err, n)
                 if err == io.EOF{
                     done = true
+                    log.Println("Done recording", filepath, orr)
                     break
                 }
             }
@@ -86,6 +87,7 @@ func httprecCallback(orr *OnetimeRecordingRequest){
         if done{ break }
     }
     proxy.RemoveWriter(orr.Addrinfo, c)
+    RemoveSchedule(orr)
 }
 
 func HTTPRec(w http.ResponseWriter, req *http.Request){
@@ -161,7 +163,7 @@ func main(){
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-    opt_http := flag.Bool("http", false, "Enable HTTP Proxy")
+    opt_http := flag.String("http", "", "Enable HTTP Proxy to listen in this port")
     opt_testrtp := flag.String("testrtp", "", "Test a multicast RTP stream")
 
     flag.Parse()
@@ -175,8 +177,8 @@ func main(){
         RTPToFile(*opt_testrtp)
     }
 
-    if *opt_http{
-	    NewHTTPServer(":1235", map[string]func(http.ResponseWriter, *http.Request){
+    if *opt_http != ""{
+	    NewHTTPServer(*opt_http, map[string]func(http.ResponseWriter, *http.Request){
 	        "/udp/": RTPToHTTP,
 	        "/rtp/": RTPToHTTP,
 	        "/rec/": HTTPRec,

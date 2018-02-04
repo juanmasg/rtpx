@@ -63,6 +63,17 @@ func RestartAll(){
     }
 }
 
+func RemoveSchedule(orr *OnetimeRecordingRequest){
+    for i, r := range OnetimeRequests{
+        if r.Addrinfo == orr.Addrinfo && r.Start == orr.Start && r.Duration == orr.Duration{
+            OnetimeRequests = append(OnetimeRequests[:i], OnetimeRequests[i+1:]...)
+            log.Println("Removed request from schedule.", orr)
+            SaveSchedule()
+            break
+        }
+    }
+}
+
 type Recordable interface{
     Run(save bool)
 }
