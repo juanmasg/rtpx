@@ -6,9 +6,12 @@ import (
 	"log"
 	//"fmt"
 	"os"
+    "time"
     "flag"
     "strings"
 	"net/http"
+    "strconv"
+    "encoding/base64"
 )
 
 var (
@@ -25,8 +28,6 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
 
     addrinfo := strings.Split(req.URL.Path, "/")[2]
     proxy.RegisterReader2(addrinfo)
-
-    //w.Header().Set("Transfer-Encoding", "identity")
 
     c := make(chan []byte, 1024)
     proxy.RegisterWriter(addrinfo, c)
@@ -52,6 +53,48 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     }
 
     proxy.RemoveWriter(addrinfo, c)
+}
+
+func HTTPRec(w http.ResponseWriter, req *http.Request){
+    log.Println(req)
+
+    args := strings.Split(req.URL.Path, "/")
+    addrinfo, _ := base64.URLEncoding.DecodeString(args[2])
+    name, _ := base64.URLEncoding.DecodeString(args[3])
+    season, _ := base64.URLEncoding.DecodeString(args[4]) // '' for any
+    episode, _ := base64.URLEncoding.DecodeString(args[5]) // '' for any
+    title, _ := base64.URLEncoding.DecodeString(args[6]) // '' for any
+
+    var start       time.Time
+    var duration    time.Duration
+    var rec         interface{}
+
+    if len(args) > 8{
+        startint, err := strconv.ParseInt(args[7], 10, 64); if err != nil{
+            log.Println(err)
+        }
+        start = time.Unix(startint, 0)
+        duration, err = time.ParseDuration(args[8]); if err != nil{
+            log.Println(err)
+        }
+    }
+
+    rec = RecordingRequest{
+        string(addrinfo),
+        string(name),
+        string(season),
+        string(episode),
+        string(title),
+    }
+
+    if ! start.IsZero() && duration.Seconds() > 0{
+        rec = OnetimeRecordingRequest{start,duration,rec.(RecordingRequest)}
+    }
+
+    log.Printf("%+v", rec)
+
+    go rec.(Recordable).Run()
+
 }
 
 func RTPToFile(addrinfo string){
@@ -92,15 +135,17 @@ func main(){
     proxy = NewProxy()
     go proxy.Loop()
 
+    go Recorder()
+
     if *opt_testrtp != ""{
         RTPToFile(*opt_testrtp)
     }
 
     if *opt_http{
-	    NewHTTPServer(":1234", map[string]func(http.ResponseWriter, *http.Request){
+	    NewHTTPServer(":1235", map[string]func(http.ResponseWriter, *http.Request){
 	        "/udp/": RTPToHTTP,
 	        "/rtp/": RTPToHTTP,
-	        //"/raw/": RAWToHTTP,
+	        "/rec/": HTTPRec,
 	    })
     }
 }
