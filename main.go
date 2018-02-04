@@ -5,7 +5,9 @@ import (
     //"github.com/Comcast/gots/packet"
 	"log"
 	//"fmt"
+    "io"
 	"os"
+    "fmt"
     "time"
     "flag"
     "strings"
@@ -53,6 +55,29 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     }
 
     proxy.RemoveWriter(addrinfo, c)
+}
+
+func httprecCallback(orr *OnetimeRecordingRequest){
+    w := NewTimedWriter(fmt.Sprintf("%s %s.%s - %s.ts", orr.name, orr.season, orr.episode, orr.title), orr.Duration)
+    proxy.RegisterReader2(orr.addrinfo)
+    c := make(chan []byte, 1024)
+    proxy.RegisterWriter(orr.addrinfo, c)
+
+    done := false
+    for{
+        select{
+        case b := <-c:
+            n, err := w.Write(b); if err != nil{
+                log.Println(err, n)
+                if err == io.EOF{
+                    done = true
+                    break
+                }
+            }
+        }
+        if done{ break }
+    }
+    proxy.RemoveWriter(orr.addrinfo, c)
 }
 
 func HTTPRec(w http.ResponseWriter, req *http.Request){
@@ -135,7 +160,7 @@ func main(){
     proxy = NewProxy()
     go proxy.Loop()
 
-    go Recorder()
+    go Recorder(httprecCallback)
 
     if *opt_testrtp != ""{
         RTPToFile(*opt_testrtp)
