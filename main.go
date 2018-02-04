@@ -7,6 +7,7 @@ import (
 	//"fmt"
     "flag"
 	"net/http"
+    "golang.org/x/net/webdav"
 )
 
 var (
@@ -33,10 +34,19 @@ func main(){
     }
 
     if *opt_http != ""{
+
+        dav := webdav.Handler{Prefix: "/dav/"}
+        dav.Logger = func(r *http.Request, err error){
+            log.Println(err, r)
+        }
+        dav.FileSystem = webdav.Dir("rec/")
+        dav.LockSystem = webdav.NewMemLS()
+
 	    NewHTTPServer(*opt_http, map[string]func(http.ResponseWriter, *http.Request){
 	        "/udp/": RTPToHTTP,
 	        "/rtp/": RTPToHTTP,
 	        "/rec/": HTTPRec,
+            "/dav/": dav.ServeHTTP,
 	    })
     }
 }
