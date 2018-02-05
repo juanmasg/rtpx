@@ -2,7 +2,7 @@ package main
 
 import (
     "encoding/binary"
-    "io"
+    //"io"
     "fmt"
 )
 
@@ -101,12 +101,12 @@ func RTPPacket(b []byte) *RTP{
 }
 
 
-func ReadRTP(r io.Reader) (*RTP, error){
+func ReadRTP(r MulticastReader) (*RTP, string, error){
     b := make([]byte, 1500)
-	n, err := r.Read(b); if err != nil{
-        return nil, err
+	n, cm, _, err := r.ReadFrom(b); if err != nil{
+        return nil, "", err
 	}
 	rtp := RTPPacket(b[:n])
-    return rtp, nil
+    return rtp, cm.Dst.String(), nil
 }
 
