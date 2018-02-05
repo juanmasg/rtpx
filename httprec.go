@@ -15,13 +15,19 @@ import (
 func httprecCallback(orr *OnetimeRecordingRequest){
 
     recdir := "rec"
-    os.MkdirAll(recdir, 0755)
+    seriedir := fmt.Sprintf("%s/%s", recdir, orr.Name)
+    os.MkdirAll(seriedir, 0755)
 
-    filepath := fmt.Sprintf("%s/%s %s.%s - %s.ts", recdir, orr.Name, orr.Season, orr.Episode, orr.Title)
+    filepath := fmt.Sprintf("%s/%s S%02sE%02s", seriedir, orr.Name, orr.Season, orr.Episode)
+    if orr.Title != ""{
+        filepath = fmt.Sprintf("%s - %s.ts", filepath, orr.Title)
+    }else{
+        filepath += ".ts"
+    }
 
     w := NewTimedWriter(filepath, orr.Duration)
 
-    proxy.RegisterReader2(orr.Addrinfo)
+    proxy.RegisterReader(orr.Addrinfo)
 
     c := make(chan []byte, 1024)
     proxy.RegisterWriter(orr.Addrinfo, c)
