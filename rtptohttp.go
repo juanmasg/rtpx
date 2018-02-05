@@ -15,7 +15,7 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     }
 
     addrinfo := strings.Split(req.URL.Path, "/")[2]
-    proxy.RegisterReader2(addrinfo)
+    proxy.RegisterReader(addrinfo)
 
     c := make(chan []byte, 1024)
     proxy.RegisterWriter(addrinfo, c)

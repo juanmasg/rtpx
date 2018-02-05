@@ -6,7 +6,7 @@ import (
 )
 
 func RTPToFile(addrinfo string){
-    proxy.RegisterReader2(addrinfo)
+    proxy.RegisterReader(addrinfo)
 
 	w, err := os.OpenFile(addrinfo, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0664); if err != nil{
         log.Fatal(err)

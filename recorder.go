@@ -104,7 +104,7 @@ type OnetimeRecordingRequest struct{
 }
 
 func (orr *OnetimeRecordingRequest) MarshalJSON() ([]byte, error){
-    log.Println("MARSHAL", orr, orr.RecordingRequest)
+//    log.Println("MARSHAL", orr, orr.RecordingRequest)
     return json.Marshal(&struct{
         Start               int64
         Duration            float64
