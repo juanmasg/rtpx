@@ -29,9 +29,9 @@ func newProxyGroup(port int, reader MulticastReader) ProxyGroup{
 }
 
 func (g *ProxyGroup) String() string{
-    s := fmt.Sprintf("Group: %d", g.port)
+    s := fmt.Sprintf("Group %d: ", g.port)
     for addrinfo, writers := range g.writers{
-        s += fmt.Sprintf(", %s: %d", addrinfo, len(writers))
+        s += fmt.Sprintf("/ %s: %d", addrinfo, len(writers))
     }
 
     return s
@@ -53,7 +53,7 @@ func NewProxy() *Proxy{
 func (p *Proxy) PrintGroups(){
     log.Println("Groups:", len(p.groups))
     for _, g := range p.groups{
-        log.Printf(" - Group: %s\n", g.String())
+        log.Printf(g.String())
     }
 }
 

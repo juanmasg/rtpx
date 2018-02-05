@@ -16,6 +16,10 @@ type MulticastReader struct{
     iface   *net.Interface
 }
 
+func (r MulticastReader) String() string{
+    return fmt.Sprintf("MulticastReader/%s/0.0.0.0:%d", r.iface.Name, r.Port)
+}
+
 func (r MulticastReader) ReadFrom(b []byte) (n int, cm *ipv4.ControlMessage, src net.Addr, err error){
     n, cm, src, err = r.p.ReadFrom(b);
     return
@@ -27,27 +31,6 @@ func (r MulticastReader) Close() (err error){
     r.c.Close()
     return nil
 }
-
-/*
-func (r *MulticastReader) WriteTo(w io.Writer) (ntot int64, err error){
-    var nr, nw int
-
-    for{
-        b := make([]byte, 1500)
-        nr, _, _, err = r.ReadFrom(b); if err != nil{
-            break
-        }
-        nw, err = w.Write(b); if err != nil{
-            break
-        }
-        ntot += int64(nw)
-    }
-
-	if nr == 0{}
-
-    return ntot, err
-}
-*/
 
 func (r *MulticastReader) SetDeadline(t time.Time) error{
     return r.p.SetDeadline(t)
@@ -69,6 +52,7 @@ func NewMulticastReader(ifacename string, addr string, port int) MulticastReader
     var err error
 
     r := MulticastReader{}
+    r.Port = port
 
     r.iface, err = net.InterfaceByName(ifacename); check(err)
 	listenaddr := fmt.Sprintf("%s:%d", addr, port)
