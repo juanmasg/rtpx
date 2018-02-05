@@ -5,7 +5,7 @@ import (
     "fmt"
     "log"
     "net"
-    "io"
+    //"io"
     "time"
 )
 
@@ -13,6 +13,7 @@ type MulticastReader struct{
     p *ipv4.PacketConn
     c net.PacketConn
     Port    int
+    iface   *net.Interface
 }
 
 func (r MulticastReader) ReadFrom(b []byte) (n int, cm *ipv4.ControlMessage, src net.Addr, err error){
@@ -27,8 +28,8 @@ func (r MulticastReader) Close() (err error){
     return nil
 }
 
+/*
 func (r *MulticastReader) WriteTo(w io.Writer) (ntot int64, err error){
-
     var nr, nw int
 
     for{
@@ -46,6 +47,7 @@ func (r *MulticastReader) WriteTo(w io.Writer) (ntot int64, err error){
 
     return ntot, err
 }
+*/
 
 func (r *MulticastReader) SetDeadline(t time.Time) error{
     return r.p.SetDeadline(t)
@@ -54,34 +56,38 @@ func (r *MulticastReader) SetReadDeadline(t time.Time) error{
     return r.p.SetReadDeadline(t)
 }
 
-func NewMulticastReader(addr string, port int) MulticastReader{
+func (r *MulticastReader) JoinGroup(group net.IP) error{
+    return r.p.JoinGroup(r.iface, &net.UDPAddr{IP:group})
+}
 
-    var iface *net.Interface
-    var group net.IP
-    var conn net.PacketConn
+func (r *MulticastReader) LeaveGroup(group net.IP) error{
+    return r.p.LeaveGroup(r.iface, &net.UDPAddr{IP:group})
+}
+
+func NewMulticastReader(ifacename string, addr string, port int) MulticastReader{
+
     var err error
 
-    ifacename := "eno1"
-    group = net.ParseIP(addr)
-    iface, err = net.InterfaceByName(ifacename); check(err)
+    r := MulticastReader{}
+
+    r.iface, err = net.InterfaceByName(ifacename); check(err)
 	listenaddr := fmt.Sprintf("%s:%d", addr, port)
 
     log.Println("Listen", listenaddr)
 
-	conn, err = net.ListenPacket("udp4", listenaddr); check(err)
+	r.c, err = net.ListenPacket("udp4", listenaddr); check(err)
 
-    log.Println("Conn", conn, conn.LocalAddr())
+    r.c.(*net.UDPConn).SetReadBuffer(4 * 1024 * 1024)
 
-    p := ipv4.NewPacketConn(conn)
+    log.Println("Conn", r.c, r.c.LocalAddr())
 
-    err = p.JoinGroup(iface, &net.UDPAddr{IP: group}); check(err); if err != nil{
-        log.Println("Cannot join group", group, err)
-    }
-    err = p.SetControlMessage(ipv4.FlagDst, true); if err != nil {
+    r.p = ipv4.NewPacketConn(r.c)
+
+    err = r.p.SetControlMessage(ipv4.FlagDst, true); if err != nil {
         log.Println("Cannot SetControlMessage FlagDst")
     }
 
-    return MulticastReader{p, conn, port}
+    return r
 }
 
 func check(err error){

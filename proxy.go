@@ -7,61 +7,89 @@ import (
     "time"
     "log"
     "net"
+    "fmt"
     "sync"
 )
 
+type ProxyGroup struct{
+    port        int
+    reader      MulticastReader
+    writers     map[string][]chan []byte
+    rtpseq      map[string]uint16
+}
+
+func newProxyGroup(port int, reader MulticastReader) ProxyGroup{
+    g := ProxyGroup{}
+    g.port = port
+    g.reader = reader
+    g.writers = make(map[string][]chan []byte)
+    g.rtpseq = make(map[string]uint16)
+
+    return g
+}
+
+func (g *ProxyGroup) String() string{
+    s := fmt.Sprintf("Group: %d", g.port)
+    for addrinfo, writers := range g.writers{
+        s += fmt.Sprintf(", %s: %d", addrinfo, len(writers))
+    }
+
+    return s
+}
+
+
 type Proxy struct{
     sync.RWMutex
-    readers map[string]io.Reader
-    writers map[string][]chan []byte
-    rtpseq map[string]uint16
+    groups map[int]ProxyGroup
 }
 
 func NewProxy() *Proxy{
     p := &Proxy{}
-    p.readers = make(map[string]io.Reader)
-    p.writers = make(map[string][]chan []byte)
-    p.rtpseq = make(map[string]uint16)
+    p.groups = make(map[int]ProxyGroup)
 
     return p
+}
+
+func (p *Proxy) PrintGroups(){
+    log.Println("Groups:", len(p.groups))
+    for _, g := range p.groups{
+        log.Printf(" - Group: %s\n", g.String())
+    }
 }
 
 func (p *Proxy) RegisterReader(addrinfo string){
     p.Lock()
     ip, port := addrinfoToIPPort(addrinfo)
-	r, ok := p.readers[addrinfo]; if !ok{
-		r = NewMulticastReader(ip, port)
-		p.readers[addrinfo] = r
-        log.Println("Registered new reader for", addrinfo, r)
-	}
-    p.Unlock()
-}
-
-func (p *Proxy) RegisterReader2(addrinfo string){
-    p.Lock()
-    r, ok := p.readers[addrinfo]; if !ok{
-	    addr, err := net.ResolveUDPAddr("udp", addrinfo); if err != nil {
-	        log.Fatal(err)
-	    }
-	    r, err = net.ListenMulticastUDP("udp", nil, addr)
-        r.(*net.UDPConn).SetReadBuffer(4 * 1024 * 1024)
-        p.readers[addrinfo] = r
-        log.Println("Registered new reader2 for", addrinfo, r)
+	g, ok := p.groups[port]; if !ok{
+		r := NewMulticastReader("eno1", ip, port)
+        log.Println("Registered new reader for", port, r)
+        g = newProxyGroup(port, r)
+        log.Printf("Created new proxy group for %d, with reader %s", port, r)
+		p.groups[port] = g
+	}else{
+        log.Println("Reader already exists for", port, g, g.reader)
+        _, alreadyjoined := g.writers[addrinfo]; if alreadyjoined{ //TODO: this should be handled in the reader
+            return
+        }
     }
     p.Unlock()
+    g.reader.JoinGroup(net.ParseIP(ip))
 }
 
 func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
     p.Lock()
-    _, ok := p.writers[addrinfo]; if !ok{
-        p.writers[addrinfo] = make([]chan []byte, 0)
+    _, port := addrinfoToIPPort(addrinfo)
+    g, ok := p.groups[port]; if !ok{
+        p.RegisterReader(addrinfo)
+    }
+    _, ok = g.writers[addrinfo]; if !ok{
+        g.writers[addrinfo] = make([]chan []byte, 0)
     }
 
-    p.writers[addrinfo] = append(p.writers[addrinfo], c)
-    log.Println("Registered new writer for", addrinfo, c)
+    g.writers[addrinfo] = append(g.writers[addrinfo], c)
+    log.Println("Registered new writer for", g.port, addrinfo, c)
 
-    log.Println("Readers", p.readers)
-    log.Println("Writers", p.writers)
+    p.PrintGroups()
 
     p.Unlock()
 }
@@ -69,80 +97,92 @@ func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
 func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
     p.Lock()
 
-    for i, wc := range p.writers[addrinfo]{
+    ip, port := addrinfoToIPPort(addrinfo)
+
+    g, ok := p.groups[port]; if !ok{
+        log.Println("WARNING: No reader for group", port)
+    }
+
+    for i, wc := range g.writers[addrinfo]{
         if c == wc{
-            p.writers[addrinfo] = append(p.writers[addrinfo][:i], p.writers[addrinfo][i+1:]...)
+            g.writers[addrinfo] = append(g.writers[addrinfo][:i], g.writers[addrinfo][i+1:]...)
             log.Println("Removed writer", c)
         }
     }
-    if len(p.writers[addrinfo]) == 0{
-        log.Println("No more writers left for", addrinfo, "closing reader")
-        delete(p.writers, addrinfo)
 
-        _, exists := p.readers[addrinfo]; if exists{
-            p.readers[addrinfo].(io.ReadCloser).Close()
-            delete(p.readers, addrinfo)
+    if len(g.writers[addrinfo]) == 0{
+        log.Println("No more writers left for", addrinfo, "closing reader")
+        delete(g.writers, addrinfo)
+
+        g.reader.LeaveGroup(net.ParseIP(ip))
+
+        if len(g.writers) == 0{
+            log.Println("No more readers in group", port, ". Removing group")
+            g.reader.Close()
+            delete(p.groups, port)
         }
-        log.Println("Removed all read/write references to", addrinfo)
+
     }
 
-    log.Println("Readers", p.readers)
-    log.Println("Writers", p.writers)
+    p.PrintGroups()
 
     p.Unlock()
 }
 
-func (p *Proxy) RemoveReader(reader io.Reader){
-    log.Println("Remove reader",  reader, p.readers)
-    for addrinfo, r := range p.readers{
-        if r == reader{
-            log.Println("Found addrinfo for reader", addrinfo, ". Remove all writers")
-            r.(io.Closer).Close()
-            delete(p.readers, addrinfo)
-            for _, c := range p.writers[addrinfo]{
-                close(c)
-            }
+func (p *Proxy) CloseGroup(port int){
+    log.Println("Close group", port)
+    g := p.groups[port]
+    log.Println("Found group for", port, ". Remove all writers")
+    g.reader.Close()
+    for addrinfo, chans := range g.writers{
+        for _, c := range chans{
+            close(c)
+            log.Println("Writer", addrinfo, "closed")
         }
     }
+    delete(p.groups, port)
 }
 
 func (p *Proxy) Loop(){
+    waitintvl := 100 * time.Millisecond
     for{
-        time.Sleep(100 * time.Millisecond)
+        time.Sleep(waitintvl)
         for{
-            if len(p.readers) == 0{ break }
+            if len(p.groups) == 0{ break }
             p.Lock()
-            for addrinfo, r := range p.readers{
-                r.(*net.UDPConn).SetReadDeadline(time.Now().Add(250 * time.Millisecond)) //FIXME: ?!
-                rtp, err := ReadRTP(r); if err != nil{
+            for port, g := range p.groups{
+                g.reader.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))
+                rtp, dst, err := ReadRTP(g.reader); if err != nil{
                     if err == io.EOF{
-                        log.Println("EOF from", r)
+                        log.Println("EOF from", g.reader)
                     }else{
-                        operr := err.(*net.OpError)
-                        if operr != nil && operr.Timeout(){
-                            log.Println("Timeout from", r)
+                        operr := err.(*net.OpError); if operr != nil && operr.Timeout(){
+                            log.Println("Timeout from", g.reader)
                         }
                     }
-                    p.RemoveReader(r)
+                    p.CloseGroup(port)
                     break
                 }
 
                 if rtp == nil{ continue }
 
-                if p.rtpseq[addrinfo] + 2 != rtp.SequenceNumber - 0xffff{
-                    log.Println("RTP SEQUENCE FAILED FOR", addrinfo, "expecting", p.rtpseq[addrinfo] + 2, "have", rtp.SequenceNumber, rtp.SequenceNumber - 0xffff)
+                addrinfo := fmt.Sprintf("%s:%d", dst, port)
+
+                if g.rtpseq[addrinfo] + 2 != rtp.SequenceNumber - 0xffff{
+                    log.Println("BAD RTPSEQ", addrinfo,
+                        "expecting", g.rtpseq[addrinfo] + 2,
+                        "have", rtp.SequenceNumber, rtp.SequenceNumber - 0xffff)
                 }
 
-                for _, c := range p.writers[addrinfo]{
+                for _, c := range g.writers[addrinfo]{
                     c <- rtp.Payload
                 }
-                p.rtpseq[addrinfo] = rtp.SequenceNumber
+                g.rtpseq[addrinfo] = rtp.SequenceNumber
             }
             p.Unlock()
         }
     }
 }
-
 
 func addrinfoToIPPort(addrinfo string) (ip string, port int){
     ipport := strings.Split(addrinfo, ":")
@@ -161,9 +201,4 @@ func addrinfoToIPPort(addrinfo string) (ip string, port int){
 }
 
 func readToChannel(addrinfo string, r io.Reader, c chan []byte){
-    for{
-        
-    }
 }
-
-
