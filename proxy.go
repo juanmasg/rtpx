@@ -69,11 +69,13 @@ func (p *Proxy) RegisterReader(addrinfo string){
 	}else{
         log.Println("Reader already exists for", port, g, g.reader)
         _, alreadyjoined := g.writers[addrinfo]; if alreadyjoined{ //TODO: this should be handled in the reader
+            log.Println("Reader already listening on", addrinfo)
             return
         }
     }
     p.Unlock()
     g.reader.JoinGroup(net.ParseIP(ip))
+    log.Println("JoinGroup!", ip)
 }
 
 func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
@@ -151,6 +153,7 @@ func (p *Proxy) Loop(){
             if len(p.groups) == 0{ break }
             p.Lock()
             for port, g := range p.groups{
+                //log.Println("READ FROM", port)
                 g.reader.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))
                 rtp, dst, err := ReadRTP(g.reader); if err != nil{
                     if err == io.EOF{
@@ -163,6 +166,7 @@ func (p *Proxy) Loop(){
                     p.CloseGroup(port)
                     break
                 }
+                //log.Println("RTP READ")
 
                 if rtp == nil{ continue }
 
