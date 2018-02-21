@@ -1,9 +1,10 @@
-package main
+package routers
 
 import (
     "net/http"
     "strings"
     "log"
+    "time"
 )
 
 func RTPToHTTP(w http.ResponseWriter, req *http.Request){
@@ -19,6 +20,8 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
 
     c := make(chan []byte, 1024)
     proxy.RegisterWriter(addrinfo, c)
+
+    t := time.Now()
 
     done := false
     closed := w.(http.CloseNotifier).CloseNotify()
@@ -41,5 +44,7 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     }
 
     proxy.RemoveWriter(addrinfo, c)
+
+    log.Println("RTPtoHTTP session for", addrinfo, "lasted", time.Now().Sub(t))
 }
 

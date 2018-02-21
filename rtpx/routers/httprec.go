@@ -1,4 +1,4 @@
-package main
+package routers
 
 import (
     "os"
@@ -10,9 +10,10 @@ import (
     "net/http"
     "strings"
     "encoding/base64"
+    "../rec"
 )
 
-func httprecCallback(orr *OnetimeRecordingRequest){
+func HttprecCallback(orr *rec.OnetimeRecordingRequest){
 
     recdir := "rec"
     seriedir := fmt.Sprintf("%s/%s", recdir, orr.Name)
@@ -25,7 +26,7 @@ func httprecCallback(orr *OnetimeRecordingRequest){
         filepath += ".ts"
     }
 
-    w := NewTimedWriter(filepath, orr.Duration)
+    w := rec.NewTimedWriter(filepath, orr.Duration)
 
     proxy.RegisterReader(orr.Addrinfo)
 
@@ -52,7 +53,7 @@ func httprecCallback(orr *OnetimeRecordingRequest){
         if done{ break }
     }
     proxy.RemoveWriter(orr.Addrinfo, c)
-    RemoveSchedule(orr)
+    rec.RemoveSchedule(orr)
 }
 
 func HTTPRec(w http.ResponseWriter, req *http.Request){
@@ -67,7 +68,7 @@ func HTTPRec(w http.ResponseWriter, req *http.Request){
 
     var start       time.Time
     var duration    time.Duration
-    var rec         interface{}
+    var recreq      interface{}
 
     if len(args) > 8{
         startint, err := strconv.ParseInt(args[7], 10, 64); if err != nil{
@@ -79,7 +80,7 @@ func HTTPRec(w http.ResponseWriter, req *http.Request){
         }
     }
 
-    rec = RecordingRequest{
+    recreq = rec.RecordingRequest{
         string(addrinfo),
         string(name),
         string(season),
@@ -88,12 +89,12 @@ func HTTPRec(w http.ResponseWriter, req *http.Request){
     }
 
     if ! start.IsZero() && duration.Seconds() > 0{
-        rec = OnetimeRecordingRequest{start,duration,rec.(RecordingRequest)}
+        recreq = rec.OnetimeRecordingRequest{start,duration,recreq.(rec.RecordingRequest)}
     }else{
         log.Println("Periodic request received but EPG is empty")
     }
 
-    log.Printf("%+v", rec)
+    log.Printf("%+v", recreq)
 
-    go rec.(Recordable).Run(true)
+    go recreq.(rec.Recordable).Run(true)
 }

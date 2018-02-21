@@ -8,10 +8,14 @@ import (
     "flag"
 	"net/http"
     "golang.org/x/net/webdav"
+    "./rtpx"
+    "./rtpx/rec"
+    "./rtpx/routers"
+    _ "net/http/pprof"
 )
 
 var (
-    proxy *Proxy
+    proxy *rtpx.Proxy
 )
 
 
@@ -19,18 +23,22 @@ func main(){
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
+    go http.ListenAndServe("localhost:6060", nil)
+
     opt_http := flag.String("http", "", "Enable HTTP Proxy to listen in this port")
     opt_testrtp := flag.String("testrtp", "", "Test a multicast RTP stream")
 
     flag.Parse()
 
-    proxy = NewProxy()
+    proxy = rtpx.NewProxy()
     go proxy.Loop()
 
-    go Recorder(httprecCallback)
+    routers.SetProxy(proxy)
+
+    go rec.Recorder(routers.HttprecCallback)
 
     if *opt_testrtp != ""{
-        RTPToFile(*opt_testrtp)
+        routers.RTPToFile(*opt_testrtp)
     }
 
     if *opt_http != ""{
@@ -42,11 +50,12 @@ func main(){
         dav.FileSystem = webdav.Dir("rec/")
         dav.LockSystem = webdav.NewMemLS()
 
-	    NewHTTPServer(*opt_http, map[string]func(http.ResponseWriter, *http.Request){
-	        "/udp/": RTPToHTTP,
-	        "/rtp/": RTPToHTTP,
-	        "/rec/": HTTPRec,
+	    routers.NewHTTPServer(*opt_http, map[string]func(http.ResponseWriter, *http.Request){
+	        "/udp/": routers.RTPToHTTP,
+	        "/rtp/": routers.RTPToHTTP,
+	        "/rec/": routers.HTTPRec,
             "/dav/": dav.ServeHTTP,
+            "/rtpdav/": routers.RTPToHTTPViaDAV,
 	    })
     }
 }

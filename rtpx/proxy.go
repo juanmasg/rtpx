@@ -1,4 +1,4 @@
-package main
+package rtpx
 
 import (
     "io"
@@ -9,16 +9,17 @@ import (
     "net"
     "fmt"
     "sync"
+    "../rtpx/readers"
 )
 
 type ProxyGroup struct{
     port        int
-    reader      MulticastReader
+    reader      readers.RTPReader //MulticastReader
     writers     map[string][]chan []byte
     rtpseq      map[string]uint16
 }
 
-func newProxyGroup(port int, reader MulticastReader) ProxyGroup{
+func newProxyGroup(port int, reader readers.RTPReader) ProxyGroup{
     g := ProxyGroup{}
     g.port = port
     g.reader = reader
@@ -61,9 +62,9 @@ func (p *Proxy) RegisterReader(addrinfo string){
     p.Lock()
     ip, port := addrinfoToIPPort(addrinfo)
 	g, ok := p.groups[port]; if !ok{
-		r := NewMulticastReader("eno1", ip, port)
+		r, _ := readers.NewRTPReader("eno1", ip, port)
         log.Println("Registered new reader for", port, r)
-        g = newProxyGroup(port, r)
+        g = newProxyGroup(port, *r)
         log.Printf("Created new proxy group for %d, with reader %s", port, r)
 		p.groups[port] = g
 	}else{
@@ -102,7 +103,8 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
     ip, port := addrinfoToIPPort(addrinfo)
 
     g, ok := p.groups[port]; if !ok{
-        log.Println("WARNING: No reader for group", port)
+        log.Println("WARNING: No reader for group", port, g)
+        return
     }
 
     for i, wc := range g.writers[addrinfo]{
@@ -133,15 +135,18 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
 
 func (p *Proxy) CloseGroup(port int){
     log.Println("Close group", port)
-    g := p.groups[port]
+    g, ok := p.groups[port]; if !ok{
+        log.Println("Cannot close non-existant group", port)
+        return
+    }
     log.Println("Found group for", port, ". Remove all writers")
-    g.reader.Close()
     for addrinfo, chans := range g.writers{
         for _, c := range chans{
             close(c)
             log.Println("Writer", addrinfo, "closed")
         }
     }
+    //FIXME: g.reader.Close()
     delete(p.groups, port)
 }
 
@@ -151,17 +156,13 @@ func (p *Proxy) Loop(){
         time.Sleep(waitintvl)
         for{
             if len(p.groups) == 0{ break }
-            p.Lock()
+            //p.Lock()
             for port, g := range p.groups{
                 //log.Println("READ FROM", port)
                 g.reader.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))
-                rtp, dst, err := ReadRTP(g.reader); if err != nil{
-                    if err == io.EOF{
-                        log.Println("EOF from", g.reader)
-                    }else{
-                        operr := err.(*net.OpError); if operr != nil && operr.Timeout(){
-                            log.Println("Timeout from", g.reader)
-                        }
+                seq, rtp, dst, err := g.reader.ReadPayloadFrom(); if err != nil{
+                    operr := err.(*net.OpError); if operr != nil && operr.Timeout(){
+                        log.Println("Timeout from", g.reader)
                     }
                     p.CloseGroup(port)
                     break
@@ -172,18 +173,18 @@ func (p *Proxy) Loop(){
 
                 addrinfo := fmt.Sprintf("%s:%d", dst, port)
 
-                if g.rtpseq[addrinfo] + 2 != rtp.SequenceNumber - 0xffff{
+                if g.rtpseq[addrinfo] + 2 != seq - 0xffff{
                     log.Println("BAD RTPSEQ", addrinfo,
                         "expecting", g.rtpseq[addrinfo] + 2,
-                        "have", rtp.SequenceNumber, rtp.SequenceNumber - 0xffff)
+                        "have", seq, seq - 0xffff)
                 }
 
                 for _, c := range g.writers[addrinfo]{
-                    c <- rtp.Payload
+                    c <- rtp
                 }
-                g.rtpseq[addrinfo] = rtp.SequenceNumber
+                g.rtpseq[addrinfo] = seq
             }
-            p.Unlock()
+            //p.Unlock()
         }
     }
 }

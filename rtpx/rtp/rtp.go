@@ -1,4 +1,4 @@
-package main
+package rtp
 
 import (
     "encoding/binary"
@@ -44,15 +44,17 @@ type RTPExtension struct{
     Payload             []byte
 }
 
-func RTPQuickPayload(b []byte) []byte{
-    offset := int(12 + 4 * (b[0] & 0xf)) //hdr + CSRC
+func RTPQuickPayload(b []byte) (uint16, []byte){
+    cc := b[0] & 0xf
+    csrc := 4 * cc
+    offset := 12 + int(csrc) //hdr + CSRC
     if b[0] & 0x10 != 0{ //xtensions
         offset += 4 + 4 * int(binary.BigEndian.Uint16(b[offset+2:offset+4])) //xten hdr + 4 per xten
     }
-    return b[offset:]
+    return binary.BigEndian.Uint16(b[2:4]), b[offset:]
 }
 
-func RTPPacket(b []byte) *RTP{
+func RTPPacket(b []byte) *RTP{ //Parse
     rtp := &RTP{}
     rtp.Version = b[0] & 0xc0 >> 6
     rtp.Padding = b[0] & 0x20 != 0
@@ -100,13 +102,12 @@ func RTPPacket(b []byte) *RTP{
     return rtp
 }
 
-
-func ReadRTP(r MulticastReader) (*RTP, string, error){
-    b := make([]byte, 1500)
-	n, cm, _, err := r.ReadFrom(b); if err != nil{
-        return nil, "", err
-	}
-	rtp := RTPPacket(b[:n])
-    return rtp, cm.Dst.String(), nil
-}
-
+//func ReadRTP(r MulticastReader) (*RTP, string, error){
+//    b := make([]byte, 1500)
+//	n, cm, _, err := r.ReadFrom(b); if err != nil{
+//        return nil, "", err
+//	}
+//	rtp := RTPPacket(b[:n])
+//    return rtp, cm.Dst.String(), nil
+//}
+//

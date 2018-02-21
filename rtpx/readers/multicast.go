@@ -1,4 +1,4 @@
-package main
+package readers
 
 import (
     "golang.org/x/net/ipv4"
@@ -54,12 +54,16 @@ func NewMulticastReader(ifacename string, addr string, port int) MulticastReader
     r := MulticastReader{}
     r.Port = port
 
-    r.iface, err = net.InterfaceByName(ifacename); check(err)
+    r.iface, err = net.InterfaceByName(ifacename); if err != nil{
+        log.Println(err)
+    }
 	listenaddr := fmt.Sprintf("%s:%d", addr, port)
 
     log.Println("Listen", listenaddr)
 
-	r.c, err = net.ListenPacket("udp4", listenaddr); check(err)
+	r.c, err = net.ListenPacket("udp4", listenaddr); if err != nil{
+        log.Println(err)
+    }
 
     r.c.(*net.UDPConn).SetReadBuffer(4 * 1024 * 1024)
 
@@ -72,10 +76,4 @@ func NewMulticastReader(ifacename string, addr string, port int) MulticastReader
     }
 
     return r
-}
-
-func check(err error){
-    if err != nil{
-        log.Fatal(err)
-    }
 }
