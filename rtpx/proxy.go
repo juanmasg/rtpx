@@ -59,8 +59,8 @@ func (p *Proxy) PrintGroups(){
 }
 
 func (p *Proxy) RegisterReader(addrinfo string){
-    p.Lock()
     ip, port := addrinfoToIPPort(addrinfo)
+    //p.Lock()
 	g, ok := p.groups[port]; if !ok{
 		r, _ := readers.NewRTPReader("eno1", ip, port)
         log.Println("Registered new reader for", port, r)
@@ -74,13 +74,13 @@ func (p *Proxy) RegisterReader(addrinfo string){
             return
         }
     }
-    p.Unlock()
+    //p.Unlock()
     g.reader.JoinGroup(net.ParseIP(ip))
     log.Println("JoinGroup!", ip)
 }
 
 func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
-    p.Lock()
+    //p.Lock()
     _, port := addrinfoToIPPort(addrinfo)
     g, ok := p.groups[port]; if !ok{
         p.RegisterReader(addrinfo)
@@ -94,11 +94,11 @@ func (p *Proxy) RegisterWriter(addrinfo string, c chan []byte){
 
     p.PrintGroups()
 
-    p.Unlock()
+    //p.Unlock()
 }
 
 func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
-    p.Lock()
+    //p.Lock()
 
     ip, port := addrinfoToIPPort(addrinfo)
 
@@ -130,7 +130,7 @@ func (p *Proxy) RemoveWriter(addrinfo string, c chan[]byte){
 
     p.PrintGroups()
 
-    p.Unlock()
+    //p.Unlock()
 }
 
 func (p *Proxy) CloseGroup(port int){
@@ -180,7 +180,13 @@ func (p *Proxy) Loop(){
                 }
 
                 for _, c := range g.writers[addrinfo]{
-                    c <- rtp
+                    select{
+                        case c <- rtp:
+                        default:
+                            p.RemoveWriter(addrinfo, c)
+                            close(c)
+                            //log.Println("TIMEOUT!", c)
+                    }
                 }
                 g.rtpseq[addrinfo] = seq
             }

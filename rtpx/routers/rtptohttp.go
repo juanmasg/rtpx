@@ -18,7 +18,9 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     addrinfo := strings.Split(req.URL.Path, "/")[2]
     proxy.RegisterReader(addrinfo)
 
-    c := make(chan []byte, 1024)
+    c := make(chan []byte, 32)
+    //log.Println("CHANNEL_32", c)
+
     proxy.RegisterWriter(addrinfo, c)
 
     t := time.Now()
@@ -29,7 +31,11 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
     for{
         //log.Println("SELECT!")
         select{
-        case b := <-c:
+        case b, ok := <-c:
+            if !ok{
+                done = true
+                break
+            }
             n, err := w.Write(b); if err != nil{
                 log.Println(err, n)
                 done = true
@@ -39,7 +45,10 @@ func RTPToHTTP(w http.ResponseWriter, req *http.Request){
         case <- closed:
             done = true
             break
+        //case <- time.After(100 * time.Millisecond):
+            //timeout
         }
+
         if done{ break }
     }
 
